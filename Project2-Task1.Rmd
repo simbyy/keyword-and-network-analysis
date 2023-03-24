@@ -1,0 +1,71 @@
+---
+title: "Project 2 - Task 1"
+author: "Naren Mohan, Simran Bhatia, Srujana Gaddam"
+date: "12/11/2021"
+output: html_document
+---
+
+#### Reading the libraries
+```{r eval=TRUE, message=FALSE}
+library(igraph)
+```
+
+#### Reading the Adjacency matrix from the first assignment
+```{r eval=TRUE, echo=TRUE}
+ad_mat <- read_csv("adjacency_matrix.csv")
+categories <- as.list(ad_mat[, 1])$...1
+ad_mat <- ad_mat[, -1]
+
+row.names(ad_mat) <- categories
+
+ad_mat1 <- as.matrix(ad_mat)
+```
+
+
+```{r eval=TRUE, echo=TRUE}
+graph1 <- graph_from_adjacency_matrix(ad_mat1, mode="undirected", weighted=TRUE)
+```
+
+```{r eval=TRUE, echo=TRUE}
+vertices <- V(graph1)
+edges <- E(graph1)
+
+deg <- degree(graph1, vertices)
+str <- strength(graph1, vertices)
+```
+
+#### Top 10 Nodes by Degree
+```{r eval=TRUE, echo=TRUE}
+sort(deg, decreasing = TRUE)[1:10]
+```
+
+#### Top 10 Nodes by Strength
+```{r eval=TRUE, echo=TRUE}
+sort(str, decreasing = TRUE)[1:10]
+```
+
+#### Top 10 Edge pairs by Weight
+```{r eval=TRUE, echo=TRUE}
+edge_list <- as.data.frame(cbind(get.edgelist(graph1), edges$weight))
+colnames(edge_list) <- c("Vertex 1", "Vertex 2", "Weight")
+edge_list$Weight <- as.integer(edge_list$Weight)
+
+edge_list <- edge_list[order(-edge_list$Weight), ]
+
+edge_list[1:10, ]
+```
+
+#### Average Strength vs Degree
+
+Average Strength = Strength of a node / Degree of a node
+```{r eval=TRUE, echo=TRUE}
+df <- data.frame(matrix(ncol = 3, nrow = 248), row.names = categories)
+colnames(df) <- c('Strength', 'Degree', 'Avg Strength')
+
+df$Strength <- str
+df$Degree <- deg
+df$`Avg Strength` <- df$Strength / df$Degree
+
+plot(df$Degree, df$`Avg Strength`, main="Avg Strength vs Degree", 
+   xlab="Degree ", ylab="Avg Strength")
+```

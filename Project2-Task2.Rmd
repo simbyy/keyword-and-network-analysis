@@ -1,0 +1,144 @@
+---
+title: "Project 2 - Task 2"
+author: "Naren Mohan, Simran Bhatia, Srujana Gaddam"
+date: "12/11/2021"
+output: html_document
+---
+
+#### Reading the libraries
+```{r eval=TRUE, message=FALSE}
+library(dplyr)
+library(readr)
+library(lubridate)
+library(tidytext)
+library(ggplot2)
+library(tidyr)
+library(igraph)
+library(ggraph)
+library(qdap)
+library(tm)
+```
+
+#### Reading the dataset from 2017 to 2021
+```{r eval=TRUE, echo=TRUE}
+tweets2017f <- read_csv("tweets/2017.csv", col_select = c("date", "tweet"))
+tweets2021f <- read_csv("tweets/2021.csv", col_select = c("date", "tweet"))
+```
+
+#### Reading the dataset from 2017 to 2021
+```{r eval=TRUE, echo=TRUE}
+tweets2017 <- tweets2017f %>% 
+  filter(date >= as.Date("2017-01-01"))
+tweets2018 <- tweets2021f %>%
+  filter(date >= as.Date("2018-01-01") & date < as.Date("2019-01-01"))
+tweets2019 <- tweets2021f %>%
+  filter(date >= as.Date("2019-01-01") & date < as.Date("2020-01-01"))
+tweets2020 <- tweets2021f %>%
+  filter(date >= as.Date("2020-01-01") & date < as.Date("2021-01-01"))
+tweets2021 <- tweets2021f %>%
+  filter(date >= as.Date("2021-01-01") & date < as.Date("2022-01-01"))
+
+```
+#### Function to process yearly data
+```{r echo=TRUE, eval=TRUE}
+task2func <- function(tweetyear) {
+  
+  # Get year
+  
+  # Remove Stop words
+  filtyear <- rm_stopwords(tweetyear$tweet, stopwords=Top200Words, strip=TRUE, ignore.case=TRUE,
+                          apostrophe.remove=TRUE, separate = FALSE)
+  
+  #Get all the words into one single string
+  stryear <- ""
+  for(i in 1:length(filtyear)){
+    stryear <- paste(stryear, filtyear[i])
+  }
+  
+  stoppo <- c("amp", "httpstco")
+  stryear <- rm_stopwords(stryear, stopwords=stoppo, strip=TRUE, ignore.case=TRUE,
+                          apostrophe.remove=TRUE, separate = FALSE)
+  
+  str1 <- strsplit(stryear, split=" ")
+  str1.freq<-table(unlist(str1))
+  
+  df1 <- data.frame(cbind(word = names(str1.freq), freq = as.integer(str1.freq)))
+  df1$freq <- as.integer(df1$freq)
+  df1 <- df1[order(df1$freq, decreasing = TRUE), ]
+  
+  print(df1[1:10, ])
+  
+  plot1 <- ggplot(df1[1:10, ], aes(x= reorder(word, -freq), y = freq)) +
+    geom_col() +
+    labs(title="Histogram",
+           x = "Word",
+           y = "Frequency")
+  
+  print(plot1)
+  
+  #Zipf law
+  df1$rank <- dim(df1)[1] + 1 - row_number(df1$freq)
+  n <- sum(df1$freq)
+  
+  df1$tf <- df1$freq / n
+  
+  plot2 <- df1 %>% 
+    ggplot(aes(rank, tf)) + 
+    geom_line(size = 1.1, alpha = 0.8, show.legend = FALSE) + 
+    scale_x_log10() +
+    scale_y_log10() +
+    labs(title="Log-log plots", x="Rank", y="Word Frequency")
+  
+  print(plot2)
+  
+  #Bigrams
+  df1_bigrams <- tibble(txt = filtyear) %>%
+    unnest_tokens(bigram, txt, token = "ngrams", n = 2)
+  
+  df1_bigrams <- as.data.frame(df1_bigrams)
+  df1_bigrams.freq <- table(df1_bigrams)
+  
+  df2 <- data.frame(cbind(bigram = names(df1_bigrams.freq), freq = as.integer(df1_bigrams.freq)))
+  df2$freq <- as.integer(df2$freq)
+  df2 <- df2[order(df2$freq, decreasing = TRUE), ]
+  df2 <- df2 %>%
+    separate(bigram, c("word1", "word2"), sep = " ")
+  
+  df2_graph <- df2 %>%
+    filter(freq > 8) %>%
+    graph_from_data_frame()
+  
+  ggraph(df2_graph, layout = "fr") +
+    geom_edge_link() +
+    geom_node_point() +
+    geom_node_text(aes(label = name), vjust = 1, hjust = 1)
+}
+#return 
+```
+
+
+#### Year 2017
+```{r}
+task2func(tweets2017)
+```
+
+#### Year 2018
+```{r}
+task2func(tweets2018)
+```
+
+#### Year 2019
+```{r}
+task2func(tweets2019)
+```
+
+#### Year 2020
+```{r}
+task2func(tweets2020)
+```
+
+#### Year 2021
+```{r}
+task2func(tweets2021)
+```
+

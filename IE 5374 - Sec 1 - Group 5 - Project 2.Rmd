@@ -1,0 +1,423 @@
+---
+title: "IE 5374- Sec 1- Group 5- Project 2"
+author: "Naren, Simran, Srujana"
+output: html_document
+---
+# Assignment Objective
+The objective of project 2 is to perform keyword network analysis and word frequency analysis.
+
+# Libraries
+```{r message=FALSE, warning=FALSE}
+library(dplyr)
+library(readr)
+library(lubridate)
+library(tidytext)
+library(ggplot2)
+library(tidyr)
+library(igraph)
+library(ggraph)
+library(qdap)
+library(tm)
+```
+
+# Data
+```{r message=FALSE, warning=FALSE}
+keywordData <- read_csv("../HW 1/Keyword_data - Keyword_data.csv")
+tweets2017 <- read_csv("./2017.csv", col_select=c("date", "tweet"))
+tweets2021 <- read_csv("./2021.csv", col_select = c("date", "tweet"))
+```
+
+# Task 1
+## Task 1.1
+Use the solution from homework 1 question 3.1 as the adjacency matrix
+
+```{r Task 1.1}
+# Cleaning the rows
+df_kw <- keywordData[!(is.na(keywordData$Title) | (nchar(keywordData$Title) < 8)), ]
+
+# Getting all the unique keywords
+unq_vec <- character()
+for(i in 2:dim(df_kw)[2]) {
+  temp <- df_kw[[i]]
+  unq_vec <- c(unq_vec, temp)
+}
+
+unq_vec <- unq_vec %>%
+  unique()
+
+unq_vec <- sort(unq_vec[!is.na(unq_vec)])
+
+df_kw2 <- df_kw[, 2:dim(df_kw)[2]]
+
+# Creating a data frame with unique keywords
+matrix_kw <- data.frame(row.names = unq_vec)
+for(i in 1:length(unq_vec)) {
+  matrix_kw[unq_vec[i]] <- integer(length(unq_vec))
+}
+
+for(i in 1:dim(df_kw2)[1]) {
+  keywords_row <-  as.character(as.vector(df_kw2[i, ]))
+  for(j in 1:length(keywords_row)) {
+    temp1 <- keywords_row[j]
+    for(k in 1:length(keywords_row)) {
+      if(is.na(keywords_row[k]) | is.na(temp1)) {
+        # Do nothing
+      } else if(temp1 == keywords_row[k]) {
+        # Do nothing
+      } else {
+        matrix_kw[temp1, keywords_row[k]] <- matrix_kw[temp1, keywords_row[k]] + 1
+      }
+    }
+  }
+}
+
+print(matrix_kw)
+```
+
+## Task 1.2
+Read the adjacency matrix and convert it into a weighted network
+
+```{r Task 1.2}
+matrix_kw <- as.matrix(matrix_kw)
+net <- graph_from_adjacency_matrix(matrix_kw,
+                                   mode="undirected",
+                                   weighted=TRUE)
+```
+
+## Task 1.3
+Compute node degree and strength
+
+```{r Task 1.3}
+strength_kw <- strength(net)
+
+degree_kw <- degree(net)
+```
+
+## Task 1.4
+Show the top 10 nodes by degree and top 10 nodes by strength
+
+```{r Task 1.4}
+# arranging both lists in descending order
+strength_kw <- sort(strength_kw, decreasing = TRUE)
+degree_kw <- sort(degree_kw, decreasing = TRUE)
+
+# top 10 nodes by degree
+degree_kw[1:10]
+
+# top 10 nodes by strength
+strength_kw[1:10]
+```
+
+## Task 1.5
+Show the top 10 node pairs by weight
+
+```{r Task 1.5}
+edges <- E(net)
+edge_list <- as.data.frame(cbind(get.edgelist(net), edges$weight))
+colnames(edge_list) <- c("Vertex 1", "Vertex 2", "Weight")
+edge_list$Weight <- as.integer(edge_list$Weight)
+edge_list <- edge_list[order(-edge_list$Weight), ]
+edge_list[1:10, ]
+```
+
+##Task 1.6
+Plot average strength on y-axis and degree on x-axis
+
+```{r Task 1.6}
+# getting degrees in dataframe form
+df_degree_kw <- data.frame(keyName=names(degree_kw), value=degree_kw, row.names=NULL)
+
+# getting strengths in dataframe form
+df_strength_kw <- data.frame(keyName=names(strength_kw), value=strength_kw, row.names=NULL)
+
+# joining degree and strength dataframes
+df_kw3 <- left_join(df_degree_kw, df_strength_kw, by="keyName")
+
+# calculating average degree and strength
+df_kw3 <- df_kw3 %>%
+  mutate(avgStrength = `value.y`/`value.x`)
+
+# plotting average degree against average strength
+plot <- ggplot(df_kw3, aes(x=`value.x`, y=avgStrength, color=avgStrength)) +
+  geom_point(size = 3) +
+  labs(title = "Degree v/s Average Strength of Keyword Vertices",
+       x = "Degree",
+       y = "Average Strength") +
+  scale_color_gradient(low="#F2789F", high="#F999B7") +
+  theme_minimal() +
+  guides(color = "none")
+
+plot
+  
+```
+
+# Task 2
+The link provides the twitter data of Elon Musk from 2010-2021. For analysis consider the years 2017-2021. Each year has thousands of tweets. Assume each year to be a document (all the tweets in one year will be considered as a document).
+
+## Reading the dataset from 2017 to 2021
+
+```{r Task 2.0}
+tweets2017 <- tweets2017 %>%
+  filter(date >= as.Date("2017-01-01"))
+
+tweets2021 <- tweets2021 %>%
+  mutate(date = as.Date(date))
+
+tweets2018 <- tweets2021 %>%
+  filter(date >= as.Date("2018-01-01") & date < as.Date("2019-01-01"))
+tweets2019 <- tweets2021 %>%
+  filter(date >= as.Date("2019-01-01") & date < as.Date("2020-01-01"))
+tweets2020 <- tweets2021 %>%
+  filter(date >= as.Date("2020-01-01") & date < as.Date("2021-01-01"))
+tweets2021 <- tweets2021 %>%
+  filter(date >= as.Date("2021-01-01") & date < as.Date("2022-01-01"))
+```
+
+## Task 2.1
+Compute word frequencies for each year. Exclude the stop words
+
+```{r Task 2.1}
+# function to exclude stop words and compute word frequencies
+
+getWordFrequencies <- function(tweetyear) {
+    # Remove Stop words
+  filtyear <- rm_stopwords(tweetyear$tweet, stopwords=Top200Words, strip=TRUE, ignore.case=TRUE,
+                          apostrophe.remove=TRUE, separate = FALSE)
+  
+  #Get all the words into one single string
+  stryear <- ""
+  for(i in 1:length(filtyear)){
+    stryear <- paste(stryear, filtyear[i])
+  }
+  
+  stoppo <- c("amp", "httpstco")
+  stryear <- rm_stopwords(stryear, stopwords=stoppo, strip=TRUE, ignore.case=TRUE,
+                          apostrophe.remove=TRUE, separate = FALSE)
+  
+  str1 <- strsplit(stryear, split=" ")
+  str1.freq<-table(unlist(str1))
+  
+  df1 <- data.frame(cbind(word = names(str1.freq), freq = as.integer(str1.freq)))
+  df1$freq <- as.integer(df1$freq)
+  df1 <- df1[order(df1$freq, decreasing = TRUE), ]
+  
+  return(df1)
+}
+```
+
+### Task 2.1a - 2017
+```{r Task 2.1a}
+wordFrequencies2017 <- getWordFrequencies(tweets2017)
+```
+
+### Task 2.1b - 2018
+```{r Task 2.1b}
+wordFrequencies2018 <- getWordFrequencies(tweets2018)
+```
+
+### Task 2.1c - 2019
+```{r Task 2.1c}
+wordFrequencies2019 <- getWordFrequencies(tweets2019)
+```
+
+### Task 2.1d - 2020
+```{r Task 2.1d}
+wordFrequencies2020 <- getWordFrequencies(tweets2020)
+```
+
+### Task 2.1e - 2021
+```{r Task 2.1e}
+wordFrequencies2021 <- getWordFrequencies(tweets2021)
+```
+
+## Task 2.2
+Show top 10 words (for each year) by the highest value of word frequency
+
+### Task 2.2a - 2017
+```{r Task 2.2a}
+wordFrequencies2017 %>%
+  top_n(10)
+```
+
+### Task 2.2b - 2018
+```{r Task 2.2b}
+wordFrequencies2018 %>%
+  top_n(10)
+```
+
+### Task 2.2c - 2019
+```{r Task 2.2c}
+wordFrequencies2019 %>%
+  top_n(10)
+```
+
+### Task 2.2d - 2020
+```{r Task 2.2d}
+wordFrequencies2020 %>%
+  top_n(10)
+```
+
+### Task 2.2e - 2021
+```{r Task 2.2e}
+wordFrequencies2021 %>%
+  top_n(10)
+```
+
+## Task 2.3
+Plot histogram of word frequencies for each year
+
+```{r Task 2.3}
+# function to plot histogram of word frequencies
+
+plotHist <- function(wordfrequency) {
+    plot1 <- ggplot(wordfrequency[1:10, ], aes(x= reorder(word, -freq), y = freq, fill="#F2789F")) +
+    geom_col() +
+    labs(title="Histogram",
+           x = "Word",
+           y = "Frequency") +
+      theme_minimal() +
+      guides(color = "none", fill = "none")
+  
+  print(plot1)
+}
+```
+
+### Task 2.3a - 2017
+```{r Task 2.3a}
+plotHist(wordFrequencies2017)
+```
+
+### Task 2.3b - 2018
+```{r Task 2.3b}
+plotHist(wordFrequencies2018)
+```
+
+### Task 2.3c - 2019
+```{r Task 2.3c}
+plotHist(wordFrequencies2019)
+```
+
+### Task 2.3d - 2020
+```{r Task 2.3d}
+plotHist(wordFrequencies2020)
+```
+
+### Task 2.3e - 2021
+```{r Task 2.3e}
+plotHist(wordFrequencies2021)
+```
+
+## Task 2.4
+Use Zipf’s law and plot log-log plots of word frequencies and rank for each year
+
+```{r Task 2.4}
+# function to use zipf's law and plot log-log plots
+
+plotLogLog <- function(wordfrequency) {
+    wordfrequency$rank <- dim(wordfrequency)[1] + 1 - row_number(wordfrequency$freq)
+    n <- sum(wordfrequency$freq)
+    
+    wordfrequency$tf <- wordfrequency$freq / n
+    
+    plot2 <- wordfrequency %>%
+      ggplot(aes(rank, tf)) +
+      geom_line(size = 1.1, alpha = 0.8, show.legend = FALSE, color="#F2789F") +
+      scale_x_log10() +
+      scale_y_log10() +
+      labs(title="Log-log plots", x="Rank", y="Word Frequency") +
+      theme_minimal() +
+      guides(color = "none")
+    
+    print(plot2)
+}
+```
+
+### Task 2.4a - 2017
+
+```{r Task 2.4a}
+plotLogLog(wordFrequencies2017)
+```
+
+### Task 2.4b - 2018
+```{r Task 2.4b}
+plotLogLog(wordFrequencies2018)
+```
+
+### Task 2.4c - 2019
+```{r Task 2.4c}
+plotLogLog(wordFrequencies2019)
+```
+
+### Task 2.4d - 2020
+```{r Task 2.4d}
+plotLogLog(wordFrequencies2020)
+```
+
+### Task 2.4e - 2021
+```{r Task 2.4e}
+plotLogLog(wordFrequencies2021)
+```
+
+## Task 2.5
+Create bigram network graphs for each year
+
+```{r Task 2.5}
+# function to create bigram network
+
+createBigramNet <- function(tweetyear) {
+  filtyear <- rm_stopwords(tweetyear$tweet, stopwords=Top200Words, strip=T, ignore.case=T, apostrophe.remove=T, separate=F)
+  
+  df1_bigrams <- tibble(txt = filtyear) %>%
+    unnest_tokens(bigram, txt, token = "ngrams", n = 2)
+  
+  df1_bigrams <- as.data.frame(df1_bigrams)
+  df1_bigrams.freq <- table(df1_bigrams)
+  
+  df2 <- data.frame(cbind(bigram = names(df1_bigrams.freq), freq = as.integer(df1_bigrams.freq)))
+  df2$freq <- as.integer(df2$freq)
+  df2 <- df2[order(df2$freq, decreasing = TRUE), ]
+  df2 <- df2 %>%
+    separate(bigram, c("word1", "word2"), sep = " ")
+  
+  df2_graph <- df2 %>%
+    filter(freq > 8) %>%
+    graph_from_data_frame()
+  
+  ggraph(df2_graph, layout = "fr") +
+    geom_edge_link() +
+    geom_node_point() +
+    geom_node_text(aes(label = name, color="#F2789F"), vjust = 1, hjust = 1) +
+    theme_minimal() +
+    guides(color = "none")
+}
+```
+
+### Task 2.5a - 2018
+
+```{r Task 2.5a}
+createBigramNet(tweets2017)
+```
+
+### Task 2.5b - 2018
+
+```{r Task 2.5b}
+createBigramNet(tweets2018)
+```
+
+### Task 2.5c - 2019
+
+```{r Task 2.5c}
+createBigramNet(tweets2019)
+```
+
+### Task 2.5d - 2020
+
+```{r Task 2.5d}
+createBigramNet(tweets2020)
+```
+
+### Task 2.5e - 2021
+
+```{r Task 2.5e}
+createBigramNet(tweets2021)
+```

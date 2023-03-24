@@ -1,0 +1,167 @@
+---
+title: "Homework-1 (Group 5)"
+author: "Naren Mohan, Srujana Gaddam, Simran Bhatia"
+date: "9/22/2021"
+output: html_document
+---
+### Including the libraries
+  ```{r echo=TRUE, message=FALSE}
+library(readr)
+library(dplyr)
+library(stringr)
+```
+
+
+### Reading the Farmers Market Dataset
+```{r eval=TRUE, echo=TRUE}
+df_fm <- read_csv("fm.csv", col_types = cols(Season3Date = col_character(), 
+    Season3Time = col_character(), Season4Date = col_character(), 
+    Season4Time = col_character()))
+```
+
+### 1.1 (10 points) Compute the number of farmers market in the United States
+```{r eval=TRUE, echo=TRUE}
+fm_count <- length(unique(df_fm$FMID))
+cat("Total number of Farmers Market in the United States:", fm_count)
+```
+
+### 1.2 (10 Points) Write a code to compute the number of farmers markets by state and arrange them in descending order of number of farmers market.
+```{r eval=TRUE, echo=TRUE}
+
+# by_state <- df_fm %>% 
+#   group_by(State) %>%
+#   summarise(fm_count = n()) %>%
+#   arrange(-fm_count)
+# print(by_state)
+
+# Creating an empty data frame
+by_state = data.frame(state=character(), farmer_market_count=integer())
+
+for(i in 1:length(df_fm$State)) {
+  if(!(df_fm$State[i] %in% by_state$state)) {
+    by_state <- rbind(by_state, data.frame(state=df_fm$State[i], farmer_market_count=1))
+  }
+  else{
+    state_index <- which(by_state$state == df_fm$State[i])
+    by_state$farmer_market_count[state_index] <- by_state$farmer_market_count[state_index] + 1
+  }
+}
+
+# Sorting it in descending order
+by_state <- by_state %>%
+  arrange(-farmer_market_count)
+
+print(by_state)
+
+```
+
+
+### 1.3 (10 Points) Write a code to compute the number of farmers market by cities in Massachusetts and display the top five cities.
+```{r eval=TRUE, echo=TRUE}
+# Filtering the farmers market in Massachusetts 
+df_fm_mass <- df_fm %>% 
+  filter(State == "Massachusetts")
+
+by_city = data.frame(city=character(), farmer_market_count=integer())
+for(i in 1:length(df_fm_mass$city)) {
+  if(!(df_fm_mass$city[i] %in% by_city$city)) {
+    by_city <- rbind(by_city, data.frame(city=df_fm_mass$city[i], farmer_market_count=1))
+  }
+  else {
+    city_index <- which(by_city$city == df_fm_mass$city[i])
+    by_city$farmer_market_count[city_index] <- by_city$farmer_market_count[city_index] + 1
+  }
+}
+
+by_city <- by_city %>%
+  arrange(-farmer_market_count)
+
+print(head(by_city, 5))
+```
+
+### 1.4 (10 Points) Write a code to show the top 5 states by number of farmers market that offers coffee
+```{r eval=TRUE, echo=TRUE}
+# Checking for different data entries
+# print(unique(df_fm["Coffee"]))
+
+# Cleaning the entries in the "Coffee column"
+# Marking the NA entries as "N" for Coffee production
+index_na <- is.na(df_fm["Coffee"])
+df_fm["Coffee"][index_na] <- "N"
+
+# Verifying
+# print(unique(df_fm["Coffee"]))
+
+df_fm_coffee <- df_fm %>%
+  filter(Coffee == "Y") %>%
+  group_by(State) %>%
+  summarise(fm_count_coffee = n()) %>%
+  arrange(-fm_count_coffee)
+
+print(head(df_fm_coffee, 5))
+```
+
+### Reading the Wine Dataset
+```{r eval=TRUE, echo=TRUE, message=FALSE}
+# Reading the dataset 
+df_wine <- read_csv("wine_data.csv")
+```
+### 2.1 (20 points) Use the “designation” variable and calculate the number of 20 year old wine in the dataset
+```{r eval=TRUE, echo=TRUE}
+wd <- df_wine %>% 
+  mutate(lc_designation = str_to_lower(df_wine$designation))
+wd_20 <- wd %>% 
+  filter(str_detect(lc_designation, '20 year|20 yr|20 ano|20-year'))
+
+cat("Number of 20 year old wine:", dim(wd_20)[1])
+```
+
+### Reading the Keyword Dataset
+```{r eval=TRUE, echo=TRUE, message=FALSE}
+# Reading the dataset
+df_keyword <- read_csv("Keyword_data - Keyword_data.csv")
+```
+### 3.1 (40 points) Create a KCN network from a sample data
+```{r eval=TRUE, echo=TRUE}
+# Cleaning the rows
+df_kw <- df_keyword[!(is.na(df_keyword$Title) | (nchar(df_keyword$Title) < 8)), ]
+
+# Getting all the unique keywords
+unq_vec <- character()
+for(i in 2:dim(df_kw)[2]) {
+  temp <- df_kw[[i]]
+  unq_vec <- c(unq_vec, temp)
+}
+
+unq_vec <- unq_vec %>%
+  unique()
+
+unq_vec <- sort(unq_vec[!is.na(unq_vec)])
+
+df_kw2 <- df_kw[, 2:dim(df_kw)[2]]
+
+# Creating a data frame with unique keywords
+df_matrix <- data.frame(row.names = unq_vec)
+for(i in 1:length(unq_vec)) {
+  df_matrix[unq_vec[i]] <- integer(length(unq_vec))
+}
+
+for(i in 1:dim(df_kw2)[1]) {
+  keywords_row <-  as.character(as.vector(df_kw2[i, ]))
+  for(j in 1:length(keywords_row)) {
+    temp1 <- keywords_row[j]
+    for(k in 1:length(keywords_row)) {
+      if(is.na(keywords_row[k]) | is.na(temp1)) {
+        # Do nothing
+      } else if(temp1 == keywords_row[k]) {
+        # Do nothing
+      } else {
+        df_matrix[temp1, keywords_row[k]] <- df_matrix[temp1, keywords_row[k]] + 1
+      }
+    }
+  }
+}
+
+print(df_matrix)
+```
+
